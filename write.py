@@ -155,5 +155,5 @@ class Client:
         datanode_socket.close()
 
 client=Client()
-client.write_file("sample.txt", 1)
+client.write_file("sample.txt")
 
