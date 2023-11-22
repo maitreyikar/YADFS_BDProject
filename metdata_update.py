@@ -225,7 +225,35 @@ def get_datanodes_and_blocks(cursor, database, file_id):
 
 
 
+def add_block_metadata(cursor, db, file_id, block_id, datanode_id):
+    try:
+        # Check if the block already exists
+        cursor.execute(
+            "SELECT * FROM blocks WHERE file_id = %s AND block_id = %s AND datanode_id = %s",
+            (file_id, block_id, datanode_id)
+        )
+        result = cursor.fetchone()
 
+        if result:
+            print("Error: Block with the same file_id, block_id, and datanode_id already exists.")
+            return -1
+        else:
+            # Insert new block metadata
+            cursor.execute(
+                "INSERT INTO blocks (file_id, block_id, datanode_id) VALUES (%s, %s, %s)",
+                (file_id, block_id, datanode_id)
+            )
+            db.commit()
+            print("Block metadata added successfully.")
+            return 1
+
+    except mysql.connector.Error as err:
+        print(f"MySQL Error: {err}")
+        return -1
+
+    except Exception as e:
+        print(f"Error: {e}")
+        return -1
 
     
     

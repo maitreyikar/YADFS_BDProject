@@ -57,8 +57,8 @@ class Client:
         # update block metadata
         if status:
             self.namenode_socket.send(f"metadata_update {file_id} {block_id} {dn_id}".encode())
-            res = int(self.namenode_socket.recv(1024).decode())
-            if res == 1:
+            res = self.namenode_socket.recv(1024).decode()
+            if res == "1":
                 print("Updated metadata successfully.")
             else:
                 print("Could not update metadata")
@@ -169,8 +169,10 @@ class Client:
         for block_id in metadata:
             
             valid_dn = [int(i) for i in metadata[block_id] if int(i) in self.active_datanodes]
-
-            temp = self.connect_to_datanode(random.choice(valid_dn))
+            
+            dn_id = random.choice(valid_dn)
+            
+            temp = self.connect_to_datanode(dn_id)
             temp.send(f"GET_BLOCK_BY_ID {block_id} {file_id}".encode())
             block = temp.recv(4096).decode()
             if block != "Block not found":
@@ -224,21 +226,21 @@ class Client:
     def write_to_file(self, local_filepath, dfs_filepath):
         pass
 
-    def connect_to_MySQL(self):
-        # connect to mysql server for metadata and namespace ops
+    # def connect_to_MySQL(self):
+    #     # connect to mysql server for metadata and namespace ops
 
-        db = mysql.connector.connect(
-            host = "localhost",
-            user = "root",
-            password = "Malay@2002@",
-            database = "bdproject"
-        )
+    #     db = mysql.connector.connect(
+    #         host = "localhost",
+    #         user = "root",
+    #         password = "Malay@2002@",
+    #         database = "bdproject"
+    #     )
 
-        if db.is_connected():
-            #print("Connected to MySQL database")
-            cursor = db.cursor()
+    #     if db.is_connected():
+    #         #print("Connected to MySQL database")
+    #         cursor = db.cursor()
 
-        return cursor, db
+    #     return cursor, db
         
 def main():
     cl = Client()
@@ -460,15 +462,15 @@ def main():
                     print(i[1:-1])
                     
         elif message[0] == "download":  
-            cursor, db = cl.connect_to_MySQL()           
-            fetched_id = child_id(cursor, db, message[1])
-            print(fetched_id)  
-            cl.download_file_by_id(fetched_id)  
+            #cursor, db = cl.connect_to_MySQL()           
+            #fetched_id = child_id(cursor, db, message[1])
+            #print(fetched_id)  
+            cl.download_file_by_id(message[1])  
                
         elif message[0] == "read":
-            cursor, db = cl.connect_to_MySQL()   
-            fetched_id = child_id(cursor, db, message[1])         
-            cl.read_file_by_id_line_by_line(fetched_id)       
+            # cursor, db = cl.connect_to_MySQL()   
+            # fetched_id = child_id(cursor, db, message[1])         
+            cl.read_file_by_id_line_by_line(message[1])       
 
     cl.namenode_socket.close()                                               # close the connection
     print("done, client quitting.")

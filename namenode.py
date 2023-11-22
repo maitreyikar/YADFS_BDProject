@@ -21,7 +21,7 @@ class Namenode:
         # SQL server info
         self.host = "localhost"
         self.user = "root"
-        self.password = "Malay@2002@"
+        self.password = "maitreyi@1304"
         self.database = "bdproject"
 
     def connect_to_MySQL(self):
