@@ -221,47 +221,24 @@ def get_datanodes_and_blocks(cursor, database, file_id):
     except Exception as e:
         print(f"Error: {e}")
         return -1
+    
 
 
 
 
-
-
-
-
-
-def get_datanodes_and_blocks(cursor, file_id):
-    try:
-        # Retrieve datanode_id and block_id for the given file_id
-        cursor.execute(
-            "SELECT datanode_id, block_id FROM blocks WHERE file_id = %s",
-            (file_id,)
-        )
-        results = cursor.fetchall()
-
-        datanodes_and_blocks = {}
-
-        for row in results:
-            datanode_id = row['datanode_id']
-            block_id = row['block_id']
-
-            # Add block_id to the list for the corresponding datanode_id
-            if block_id in datanodes_and_blocks:
-                datanodes_and_blocks[block_id].append(datanode_id)
-            else:
-                datanodes_and_blocks[block_id] = [datanode_id]
-
-        return datanodes_and_blocks
-
-    except mysql.connector.Error as err:
-        print(f"MySQL Error: {err}")
-        return -1
-
-    except Exception as e:
-        print(f"Error: {e}")
-        return -1
 
     
+    
+
+
+
+
+
+
+
+
+
+
 
 # def main():
 #     host = "localhost"

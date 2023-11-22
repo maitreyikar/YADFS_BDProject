@@ -5,8 +5,13 @@ import time
 import json
 import ast
 import concurrent.futures 
+import mysql.connector
+
+from namespace import parent_id, child_id
+
 
 class Client:
+
     def __init__(self):
         self.namenode_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)   # socket for communicating with namenode 
         self.block_size = 16
@@ -149,22 +154,6 @@ class Client:
             i  = (i + 1) % n
       
       
-    def retrieve_block(self, datanode_socket, file_id, block_id):
-        datanode_socket.send(f"get_block {file_id} {block_id}".encode())
-        block_data = datanode_socket.recv(self.block_size)  # Adjust block size accordingly
-        datanode_socket.close()
-        return block_data
-
-    def stream_block(self, datanode_socket, file_id, block_id):
-        datanode_socket.send(f"stream_block {file_id} {block_id}".encode())
-        while True:
-            line = datanode_socket.recv(self.block_size)  # Adjust block size accordingly
-            if not line:
-                break
-            yield line.decode('utf-8')
-            datanode_socket.send(b'ACK')  # Sending acknowledgment for the next line
-                
-    # lakshya - reassemble block wise -- sequentially  (no blocks appear out of order)
     
     
     def download_file_by_id(self, file_id):
@@ -175,9 +164,13 @@ class Client:
             return
 
         blocks = []
-        print(metadata)
+        self.get_active_datanodes()
+
         for block_id in metadata:
-            temp = self.connect_to_datanode(metadata[block_id][0])
+            
+            valid_dn = [int(i) for i in metadata[block_id] if int(i) in self.active_datanodes]
+
+            temp = self.connect_to_datanode(random.choice(valid_dn))
             temp.send(f"GET_BLOCK_BY_ID {block_id} {file_id}".encode())
             block = temp.recv(4096).decode()
             if block != "Block not found":
@@ -186,7 +179,7 @@ class Client:
                 print(f"Error in fetching block {block_id}")
             temp.close()
 
-        file_path = f"downloaded_{file_id}.dat"  # Assuming a generic file name for the downloaded file
+        file_path = f"downloaded_{file_id}.txt"  # Assuming a generic file name for the downloaded file
         with open(file_path, 'w') as file:
             for block in blocks:
                 file.write(block)
@@ -209,7 +202,12 @@ class Client:
             return
 
         blocks = []
+        self.get_active_datanodes()
+
         for block_id in metadata:
+            for dn_id in metadata[block_id]:
+                if int(dn_id) in self.active_datanodes:
+                    break
             temp = self.connect_to_datanode(metadata[block_id][0])
             temp.send(f"GET_BLOCK_BY_ID {block_id} {file_id}".encode())
             block = temp.recv(4096).decode()
@@ -226,7 +224,22 @@ class Client:
     def write_to_file(self, local_filepath, dfs_filepath):
         pass
 
+    def connect_to_MySQL(self):
+        # connect to mysql server for metadata and namespace ops
 
+        db = mysql.connector.connect(
+            host = "localhost",
+            user = "root",
+            password = "Malay@2002@",
+            database = "bdproject"
+        )
+
+        if db.is_connected():
+            #print("Connected to MySQL database")
+            cursor = db.cursor()
+
+        return cursor, db
+        
 def main():
     cl = Client()
     try:
@@ -446,11 +459,16 @@ def main():
                 for i in res:
                     print(i[1:-1])
                     
-        elif message[0] == "download":
-            cl.download_file_by_id(message[1])        
+        elif message[0] == "download":  
+            cursor, db = cl.connect_to_MySQL()           
+            fetched_id = child_id(cursor, db, message[1])
+            print(fetched_id)  
+            cl.download_file_by_id(fetched_id)  
                
         elif message[0] == "read":
-            cl.read_file_by_id_line_by_line(message[1])        
+            cursor, db = cl.connect_to_MySQL()   
+            fetched_id = child_id(cursor, db, message[1])         
+            cl.read_file_by_id_line_by_line(fetched_id)       
 
     cl.namenode_socket.close()                                               # close the connection
     print("done, client quitting.")
