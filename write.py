@@ -131,7 +131,7 @@ class Client:
 
             i  = (i + 1) % n
 
-    def write_file(self, filepath):
+    '''def write_file(self, filepath):
         file_blocks = self.form_blocks(self,filepath)
         metadata=self.get_metadata_from_namenode(filepath)
         if metadata:
@@ -151,6 +151,30 @@ class Client:
         #creating directory, inserting blocks and updating metadata
         datanode_socket = self.connect_to_datanode(datanode_id)
         datanode_socket.send(f"upload {fileid} {block_id}".encode())
+
+        datanode_socket.close()'''
+    
+    #######NEW write_file() function
+    def write_file(self, filepath):
+        #get metadata - to check if file exists or not
+        metadata=self.get_metadata_from_namenode(filepath)
+
+        #update timestamp -- it will give file id as well 
+        self.namenode_socket.send(f"getfileid {filepath}".encode())
+        fileid = int(self.namenode_socket.recv(1024).decode())
+
+        #checking if file exists
+        if metadata:
+            for block_id in metadata:
+                datanode_id = metadata[block_id][0]
+                datanode_socket = self.connect_to_datanode(datanode_id)
+                datanode_socket.send(f"delete {fileid}".encode())
+        
+            #delete the blocks permanently
+            self.namenode_socket.send(f"rmblock {fileid}".encode())
+
+        #upload the file
+        self.upload_file(filepath, fileid)
 
         datanode_socket.close()
 
