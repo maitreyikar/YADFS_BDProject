@@ -3,28 +3,14 @@ import os
 import random
 import time
 import json
+import ast
+import concurrent.futures 
 
 class Client:
-
-    def retrieve_block(self, datanode_socket, file_id, block_id):
-        datanode_socket.send(f"get_block {file_id} {block_id}".encode())
-        block_data = datanode_socket.recv(self.block_size)  # Adjust block size accordingly
-        datanode_socket.close()
-        return block_data
-
-    def stream_block(self, datanode_socket, file_id, block_id):
-        datanode_socket.send(f"stream_block {file_id} {block_id}".encode())
-        while True:
-            line = datanode_socket.recv(self.block_size)  # Adjust block size accordingly
-            if not line:
-                break
-            yield line.decode('utf-8')
-            datanode_socket.send(b'ACK')  # Sending acknowledgment for the next line
-
-        def __init__(self):
-            self.namenode_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)   # socket for communicating with namenode 
-            self.block_size = 16
-            self.active_datanodes = None
+    def __init__(self):
+        self.namenode_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)   # socket for communicating with namenode 
+        self.block_size = 16
+        self.active_datanodes = None
 
     def connect_to_datanode(self, dn_id):
         datanode_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -32,10 +18,12 @@ class Client:
         return datanode_socket
     
     def get_metadata(self, dfs_filepath):
-        #returns active dn_ids which have blocks of the file
+        # returns active dn_ids which have blocks of the file
         pass
     
     def get_active_datanodes(self):
+        # gets active datanodes from namenode
+
         self.namenode_socket.send("active datanodes".encode())
         slist = self.namenode_socket.recv(1024).decode()
         self.active_datanodes = slist[1:-1].split(", ")
@@ -44,9 +32,12 @@ class Client:
     
     
     def send_block(self, file_id, block, block_id, dn_id):
+        # given a block, sends it to the datanode 
+
         sock = self.connect_to_datanode(dn_id)
         attempts = 0
         
+        # initalizing communication
         init_msg = f"upload {file_id} {block_id}"
         print("msg to dn: ", init_msg)
         sock.send(init_msg.encode())
@@ -58,7 +49,7 @@ class Client:
         status = int(sock.recv(1024).decode())
         print("status: ", status)
         
-
+        # update block metadata
         if status:
             self.namenode_socket.send(f"metadata_update {file_id} {block_id} {dn_id}".encode())
             res = int(self.namenode_socket.recv(1024).decode())
@@ -68,6 +59,7 @@ class Client:
                 print("Could not update metadata")
         print("\n")
 
+        # retry uploads of blocks which failed
         while not status and attempts < 2:
             print("resending block no. ", block_id)
             try:
@@ -85,6 +77,8 @@ class Client:
         
     
     def form_blocks(self, local_filepath):
+        # given a file as a string, creates blocks based on number of lines
+
         fp = open(local_filepath, "r")
         
         block = ""
@@ -112,6 +106,8 @@ class Client:
     
 
     def validate_filepath(self, local_filepath, dfs_filepath):
+        # requests namenode to update file metadata and namespace
+
         filename = local_filepath.split("/")[-1]
         finalpath = dfs_filepath + "/" + filename
         filesize = os.path.getsize(local_filepath)
@@ -125,15 +121,18 @@ class Client:
 
     def upload_file(self, local_filepath, file_id):
        
+        # get a list of active datanodes
         self.get_active_datanodes()
 
-
+        # create blocks
         file_blocks = self.form_blocks(local_filepath)
         print(len(file_blocks))
 
+        # choose first DN randomly
         n = len(self.active_datanodes)
         i = random.randint(0,n-1)
 
+        # send blocks in a round robin manner
         for b in range(len(file_blocks)):
             dn_id = self.active_datanodes[i]
             print("current dn_id: ", dn_id)
@@ -148,120 +147,82 @@ class Client:
 
 
             i  = (i + 1) % n
+      
+      
+    def retrieve_block(self, datanode_socket, file_id, block_id):
+        datanode_socket.send(f"get_block {file_id} {block_id}".encode())
+        block_data = datanode_socket.recv(self.block_size)  # Adjust block size accordingly
+        datanode_socket.close()
+        return block_data
+
+    def stream_block(self, datanode_socket, file_id, block_id):
+        datanode_socket.send(f"stream_block {file_id} {block_id}".encode())
+        while True:
+            line = datanode_socket.recv(self.block_size)  # Adjust block size accordingly
+            if not line:
+                break
+            yield line.decode('utf-8')
+            datanode_socket.send(b'ACK')  # Sending acknowledgment for the next line
                 
-######################################################################################################
-
-
-
-
-# lakshya - reassemble block wise -- sequentially  (no blocks appear out of order)
-    def download_file_by_id(self, f_id):
+    # lakshya - reassemble block wise -- sequentially  (no blocks appear out of order)
+    
+    
+    def download_file_by_id(self, file_id):
         # 1. Client Request: Requesting metadata for the file from the Namenode based on file ID
-        metadata = self.retrieve_file_metadata_by_id(f_id)
+        metadata = self.retrieve_file_metadata_by_id(file_id)
         if not metadata:
-            print("File metadata not found for file ID:", f_id)
+            print("File metadata not found for file ID:", file_id)
             return
 
-        # 2. Block Location Retrieval
-        block_locations = metadata['block_locations']
+        blocks = []
+        print(metadata)
+        for block_id in metadata:
+            temp = self.connect_to_datanode(metadata[block_id][0])
+            temp.send(f"GET_BLOCK_BY_ID {block_id} {file_id}".encode())
+            block = temp.recv(4096).decode()
+            if block != "Block not found":
+                blocks.append(block)
+            else:
+                print(f"Error in fetching block {block_id}")
+            temp.close()
 
-        # 3. Data Block Retrieval: Retrieving each data block in parallel
-        '''
-        This section uses a ThreadPoolExecutor to concurrently retrieve each data block associated with the file. 
-        It creates a list of futures, where each future corresponds to the retrieval of a data block, and 
-        then it collects the results from these futures into the blocks list.
-        '''
-        with concurrent.futures.ThreadPoolExecutor() as executor:
-            futures = [executor.submit(self.retrieve_data_block_by_id, block_id, f_id) for block_id in block_locations]
-            blocks = [future.result() for future in futures]
-
-        # 4. Reassembly
-        file_path = f"downloaded_{f_id}.dat"  # Assuming a generic file name for the downloaded file
-        with open(file_path, 'wb') as file:
+        file_path = f"downloaded_{file_id}.dat"  # Assuming a generic file name for the downloaded file
+        with open(file_path, 'w') as file:
             for block in blocks:
                 file.write(block)
 
         # 5. File Completion Check and Cleanup
         print("File downloaded successfully. Saved as:", file_path)
 
-    # def retrieve_file_metadata_by_id(self, f_id):
-    #     # Code to retrieve file metadata from the Namenode using file ID
-    #     pass
 
-    # def retrieve_data_block_by_id(self, block_id):
-    #     # Code to retrieve a specific data block from the Data Node using block ID
-    #     pass
-
-
-
-## lakshya
-## json.loads() for dictionary
     def retrieve_file_metadata_by_id(self, f_id):
-        # Connect to the Namenode
-        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-            s.connect((self.namenode_host, self.namenode_port))
-            # Send the request for file metadata
-            s.sendall(f"GET_METADATA_BY_ID {f_id}".encode()) # name node gets the string and then parses
-            # Wait for the response
-            response_dict = s.recv(1024).decode()
-            response = json.loads(response_dict)
-            return eval(response) if response else None
-
-    def retrieve_data_block_by_id(self, block_id, file_id):
-        # Determine the Datanode's address and port from the block ID
-        datanode_host, datanode_port = self.get_datanode_address(block_id)
-
-        # Connect to the Datanode
-        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-            s.connect((datanode_host, datanode_port))
-            # Send the request for the data block
-            s.sendall(f"GET_BLOCK_BY_ID {block_id} {file_id}".encode())
-            # Wait for the block data
-            block_data = s.recv(self.block_size)
-            return block_data
-
-    def get_datanode_address(self, block_id):
-        # Placeholder method to determine the Datanode's address from the block ID
-        datanode_host = 'localhost'
-        datanode_port = 3000 + (block_id % self.number_of_datanodes)  # Example logic
-        return datanode_host, datanode_port
+        self.namenode_socket.send(f"GET_METADATA_BY_ID {f_id}".encode())
+        response_dict = self.namenode_socket.recv(1024).decode()
+        response = ast.literal_eval(response_dict)
+        return response if response else None
     
 
-#################################################################################################
-# # sort w map
-# metadata - dict
-# read in the right order (block_id) -- done
-    def read_file_by_id_line_by_line(self, f_id):
-        # Retrieve file metadata using file ID
-        metadata = self.retrieve_file_metadata_by_id(f_id)
+    def read_file_by_id_line_by_line(self, file_id):
+        metadata = self.retrieve_file_metadata_by_id(file_id)
         if not metadata:
-            print("File metadata not found for file ID:", f_id)
+            print("File metadata not found for file ID:", file_id)
             return
 
-        block_locations = metadata['block_locations']
+        blocks = []
+        for block_id in metadata:
+            temp = self.connect_to_datanode(metadata[block_id][0])
+            temp.send(f"GET_BLOCK_BY_ID {block_id} {file_id}".encode())
+            block = temp.recv(4096).decode()
+            if block != "Block not found":
+                blocks.append(block)
+            else:
+                print(f"Error in fetching block {block_id}")
+            temp.close()
+
+        for block in blocks:
+            print(block)
 
 
-        for block_id in block_locations:
-            dn_id, block_id = block_locations[block_id]
-            datanode_socket = self.connect_to_datanode(dn_id)
-            datanode_socket.send(f"stream_block {f_id} {block_id}".encode())
-
-            while True:
-                line = datanode_socket.recv(self.block_size)  # Adjust block size accordingly
-                if not line:
-                    break
-                yield line.decode('utf-8')
-                datanode_socket.send(b'ACK')  # Sending acknowledgment for the next line
-
-            datanode_socket.close()
-                # Read and process each block
-        for block_id in block_locations:
-            block_data = self.retrieve_data_block_by_id(block_id)
-            for line in block_data.splitlines():
-                yield line.decode('utf-8')  # having assumed that the data is UTF-8 encoded
-
-#################################################################################################
-##  download file by id meta data req  ---- retrun dict , retreive data
     def write_to_file(self, local_filepath, dfs_filepath):
         pass
 
@@ -285,12 +246,15 @@ def main():
     
     while True:
         print("\n")
+
+        # get input from user
         action = input(" -> ")
         if action.strip().lower() == "bye":
             cl.namenode_socket.send(action.encode())
             break
 
         message = action.strip().split(" ")
+
 
         if message[0] == "upload":
             size = os.path.getsize(message[1])
@@ -343,6 +307,7 @@ def main():
                 print("file_ids to delete by rmdir:",res)
                 cl.get_active_datanodes()
 
+                #delete blocks from datanodes
                 for file in res:
                     for dn_id in cl.active_datanodes:
                         sock = cl.connect_to_datanode(dn_id)
@@ -360,6 +325,8 @@ def main():
             else:
                 print("File deleted successfully")
                 cl.get_active_datanodes()
+
+                #delete blocks form datanodes
                 for dn_id in cl.active_datanodes:
                     sock = cl.connect_to_datanode(dn_id)
                     sock.send(f"delete {res}".encode())
@@ -410,16 +377,18 @@ def main():
                 print("Directory copied succesfully")
                 if file_id_update == "[]":
                     continue
+
+                # src_file_id, copied_file_id as a result of cpdir
                 file_id_update = file_id_update[2:-2].split("), (")
                 file_id_update = [i.split(", ") for i in file_id_update]
-                #print(file_id_update)
+                
                 cl.get_active_datanodes()
 
+                # making copies in DNs
                 for file in file_id_update:
                     for dn_id in cl.active_datanodes:
                         sock = cl.connect_to_datanode(dn_id)
                         sock.send(f"copy {file[0]} {file[1]}".encode())
-                        #time.sleep(1)
                         sock.close()
 
             
@@ -436,9 +405,11 @@ def main():
                 print("A file of the same name already exists in the destination directory")
             else:
                 print("File copied successfully")
+
+                # src_file_id, new_file_id 
                 file_id_update = file_id_update[2:-2].split("), (")
                 file_id_update = [i.split(", ") for i in file_id_update]
-                #print(file_id_update)
+
                 cl.get_active_datanodes()
                 for dn_id in cl.active_datanodes:
                     sock = cl.connect_to_datanode(dn_id)
@@ -461,12 +432,7 @@ def main():
                         print(c.ljust(30), end = "")
                     print("")
 
-                    
-        elif message[0] == "download":
-            cl.download_file_by_id(message[1])
-        
-        elif message[0] == "read":
-            cl.read_file_by_id_line_by_line(message[1])
+
 
         elif message[0] == "tree":
             cl.namenode_socket.send(action.encode())
@@ -479,17 +445,12 @@ def main():
                 res = res[1:-1].split(", ")
                 for i in res:
                     print(i[1:-1])
-        
-
-
-        
-        
-
-
-            
-
-        
-
+                    
+        elif message[0] == "download":
+            cl.download_file_by_id(message[1])        
+               
+        elif message[0] == "read":
+            cl.read_file_by_id_line_by_line(message[1])        
 
     cl.namenode_socket.close()                                               # close the connection
     print("done, client quitting.")
@@ -501,39 +462,3 @@ if __name__ == '__main__':
     except KeyboardInterrupt:
         print("done, client quitting.")
         exit(0)
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

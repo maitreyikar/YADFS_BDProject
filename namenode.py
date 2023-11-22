@@ -1,7 +1,6 @@
 import socket
 import concurrent.futures
 import time
-import json
 
 from metdata_update import *
 from namespace import *
@@ -9,30 +8,25 @@ from namespace import *
 
 class Namenode:
     def __init__(self):
+
+        # keeps track of active DNs
         self.connections = []
+
+        # server side TCP socket for listening to client connection requests
         self.port = 5000
         self.ip = socket.gethostname()
         self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.socket.bind((self.ip, self.port))
 
+        # SQL server info
         self.host = "localhost"
         self.user = "root"
-        self.password = "1234"
+        self.password = "Malay@2002@"
         self.database = "bdproject"
 
-    def retrieve_file_metadata_by_id(self, file_id):
-        cursor, db = self.connect_to_MySQL()
-        query = f"SELECT * FROM metadata WHERE file_id = {file_id}"
-        cursor.execute(query)
-        metadata = cursor.fetchall()  # Assuming metadata contains block locations
-
-        # Format the metadata as needed, for example, as a dictionary
-        formatted_metadata = {
-            "block_locations": {block_id: datanode_id for block_id, datanode_id in metadata}
-        }
-        return formatted_metadata
-
     def connect_to_MySQL(self):
+        # connect to mysql server for metadata and namespace ops
+
         db = mysql.connector.connect(
             host = self.host,
             user = self.user,
@@ -53,11 +47,6 @@ class Namenode:
    
 
     def client(self, comm_socket, port):
-
-        if command.startswith("get_metadata"):
-            file_id = command.split()[1]
-            metadata = self.retrieve_file_metadata_by_id(file_id)
-            comm_socket.send(str(metadata).encode())
         # communicates with client
 
         while True:
@@ -149,10 +138,6 @@ class Namenode:
                 tree = view_hierarchy(cursor, 1)
                 db.close()
                 comm_socket.send(str(tree).encode())
-            # lakshya
-            #  for sql to contact datanode and  return the dicitonary
-            # add download and read
-
             elif command[0] == "GET_METADATA_BY_ID":
                 cursor, db = self.connect_to_MySQL()
                 block_datanode_dict = get_datanodes_and_blocks(cursor, db, command[1])
@@ -180,6 +165,7 @@ class Namenode:
                 print(f"datanode {dn_id} did not acknowledge ping")
                 break
 
+        # if connection lost, update list of active datanodes
         self.connections.remove(int(dn_id))
         comm_socket.close()
 
@@ -203,6 +189,7 @@ def main():
         elif data.startswith("datanode"):
             pool.submit(nn.ping_datanode, comm_socket, str(port), data[-1])
             nn.connections.append(int(data[-1]))
+            
         
 
 pool = concurrent.futures.ThreadPoolExecutor(max_workers=10)                # thread pool
