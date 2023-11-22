@@ -77,7 +77,7 @@ class Namenode:
 
             elif command[0] == "get_metadata":
                 cursor, db = self.connect_to_MySQL()
-                block_locations = get_datanodes_and_blocks(cursor, command[1])
+                block_locations = get_datanodes_and_blocks(cursor, db, command[1])
                 db.close()
                 comm_socket.send(str(block_locations).encode())
 
@@ -143,7 +143,11 @@ class Namenode:
                 block_datanode_dict = get_datanodes_and_blocks(cursor, db, command[1])
                 db.close()
                 comm_socket.send(str(block_datanode_dict).encode())
-
+            elif command[0] == "download" or command[0] == "read":
+                cursor, db = self.connect_to_MySQL()
+                f_id = child_id(cursor, db, command[1])
+                db.close()
+                comm_socket.send(str(f_id).encode())
                 
         comm_socket.close()
 

@@ -2,13 +2,7 @@ import socket
 import os
 import random
 import time
-import json
 import ast
-import concurrent.futures 
-import mysql.connector
-
-from namespace import parent_id, child_id
-
 
 class Client:
 
@@ -57,11 +51,11 @@ class Client:
         # update block metadata
         if status:
             self.namenode_socket.send(f"metadata_update {file_id} {block_id} {dn_id}".encode())
-            res = int(self.namenode_socket.recv(1024).decode())
-            if res == 1:
-                print("Updated metadata successfully.")
-            else:
-                print("Could not update metadata")
+            res = self.namenode_socket.recv(1024).decode()
+            # if res == "1":
+            #     print("Updated metadata successfully.")
+            # else:
+            #     print("Could not update metadata")
         print("\n")
 
         # retry uploads of blocks which failed
@@ -153,62 +147,36 @@ class Client:
 
             i  = (i + 1) % n
       
-      
-    
-    
-    def download_file_by_id(self, file_id):
-        # 1. Client Request: Requesting metadata for the file from the Namenode based on file ID
-        metadata = self.retrieve_file_metadata_by_id(file_id)
-        if not metadata:
-            print("File metadata not found for file ID:", file_id)
-            return
-
-        blocks = []
-        self.get_active_datanodes()
-
-        for block_id in metadata:
-            
-            valid_dn = [int(i) for i in metadata[block_id] if int(i) in self.active_datanodes]
-
-            temp = self.connect_to_datanode(random.choice(valid_dn))
-            temp.send(f"GET_BLOCK_BY_ID {block_id} {file_id}".encode())
-            block = temp.recv(4096).decode()
-            if block != "Block not found":
-                blocks.append(block)
-            else:
-                print(f"Error in fetching block {block_id}")
-            temp.close()
-
-        file_path = f"downloaded_{file_id}.txt"  # Assuming a generic file name for the downloaded file
-        with open(file_path, 'w') as file:
-            for block in blocks:
-                file.write(block)
-
-        # 5. File Completion Check and Cleanup
-        print("File downloaded successfully. Saved as:", file_path)
 
 
     def retrieve_file_metadata_by_id(self, f_id):
-        self.namenode_socket.send(f"GET_METADATA_BY_ID {f_id}".encode())
+        self.namenode_socket.send(f"get_metadata {f_id}".encode())
         response_dict = self.namenode_socket.recv(1024).decode()
         response = ast.literal_eval(response_dict)
-        return response if response else None
+        return response if response else None 
     
+    
+    def download_file(self, file_id, save = True):
 
-    def read_file_by_id_line_by_line(self, file_id):
+        # Client Request: Requesting metadata for the file from the Namenode based on file ID
         metadata = self.retrieve_file_metadata_by_id(file_id)
         if not metadata:
             print("File metadata not found for file ID:", file_id)
             return
 
         blocks = []
+
+        # Get a list of active datanodes
         self.get_active_datanodes()
 
+        # Get each block from the datanodes
         for block_id in metadata:
-            for dn_id in metadata[block_id]:
-                if int(dn_id) in self.active_datanodes:
-                    break
-            temp = self.connect_to_datanode(metadata[block_id][0])
+            
+            valid_dn = [int(i) for i in metadata[block_id] if int(i) in self.active_datanodes]
+            
+            dn_id = random.choice(valid_dn)
+            
+            temp = self.connect_to_datanode(dn_id)
             temp.send(f"GET_BLOCK_BY_ID {block_id} {file_id}".encode())
             block = temp.recv(4096).decode()
             if block != "Block not found":
@@ -217,28 +185,25 @@ class Client:
                 print(f"Error in fetching block {block_id}")
             temp.close()
 
-        for block in blocks:
-            print(block)
 
+        # While reassembly, either it gets printed to terminal or saved as a file
+        if save:
+            file_path = f"downloaded_{file_id}.txt"  # Assuming a generic file name for the downloaded file
+            with open(file_path, 'w') as file:
+                for block in blocks:
+                    file.write(block)
+            print("File downloaded successfully. Saved as:", file_path)
+
+        else:
+            for block in blocks:
+                print(block)
+
+    
 
     def write_to_file(self, local_filepath, dfs_filepath):
         pass
 
-    def connect_to_MySQL(self):
-        # connect to mysql server for metadata and namespace ops
 
-        db = mysql.connector.connect(
-            host = "localhost",
-            user = "root",
-            password = "Malay@2002@",
-            database = "bdproject"
-        )
-
-        if db.is_connected():
-            #print("Connected to MySQL database")
-            cursor = db.cursor()
-
-        return cursor, db
         
 def main():
     cl = Client()
@@ -358,7 +323,7 @@ def main():
             elif res == -2:
                 print("Invalid destination path, try again")
             elif res == -3:
-                print("An error occured")
+                print("A directory of the same name already exists in the destination directory")
             
 
         elif message[0] == "mv":
@@ -372,7 +337,7 @@ def main():
             elif res == -2:
                 print("Invalid destination path, try again")
             elif res == -3:
-                print("An error occured")
+                print("A file of the same name already exists in the destination directory")
 
 
 
@@ -385,7 +350,7 @@ def main():
             elif file_id_update == "-2":
                 print("Invalid destination path, try again")
             elif file_id_update == "-3":
-                print("An error occured")
+                print("A directory of the same name already exists in the destination directory")
             else:
                 print("Directory copied succesfully")
                 if file_id_update == "[]":
@@ -459,16 +424,17 @@ def main():
                 for i in res:
                     print(i[1:-1])
                     
-        elif message[0] == "download":  
-            cursor, db = cl.connect_to_MySQL()           
-            fetched_id = child_id(cursor, db, message[1])
-            print(fetched_id)  
-            cl.download_file_by_id(fetched_id)  
+        elif message[0] == "download":
+            cl.namenode_socket.send(action.encode())
+            res = cl.namenode_socket.recv(1024).decode()
+            res2 = int(res)
+            cl.download_file(res2)  
                
-        elif message[0] == "read":
-            cursor, db = cl.connect_to_MySQL()   
-            fetched_id = child_id(cursor, db, message[1])         
-            cl.read_file_by_id_line_by_line(fetched_id)       
+        elif message[0] == "read":         
+            cl.namenode_socket.send(action.encode())
+            res = cl.namenode_socket.recv(1024).decode() 
+            res2 = int(res)
+            cl.download_file(res2, save = False)    
 
     cl.namenode_socket.close()                                               # close the connection
     print("done, client quitting.")
