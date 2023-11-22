@@ -21,7 +21,7 @@ class Namenode:
         # SQL server info
         self.host = "localhost"
         self.user = "root"
-        self.password = "maitreyi@1304"
+        self.password = "Malay@2002@"
         self.database = "bdproject"
 
     def connect_to_MySQL(self):
@@ -77,7 +77,7 @@ class Namenode:
 
             elif command[0] == "get_metadata":
                 cursor, db = self.connect_to_MySQL()
-                block_locations = get_datanodes_and_blocks(cursor, command[1])
+                block_locations = get_datanodes_and_blocks(cursor, db, command[1])
                 db.close()
                 comm_socket.send(str(block_locations).encode())
 
@@ -138,7 +138,16 @@ class Namenode:
                 tree = view_hierarchy(cursor, 1)
                 db.close()
                 comm_socket.send(str(tree).encode())
-
+            elif command[0] == "GET_METADATA_BY_ID":
+                cursor, db = self.connect_to_MySQL()
+                block_datanode_dict = get_datanodes_and_blocks(cursor, db, command[1])
+                db.close()
+                comm_socket.send(str(block_datanode_dict).encode())
+            elif command[0] == "download" or command[0] == "read":
+                cursor, db = self.connect_to_MySQL()
+                f_id = child_id(cursor, db, command[1])
+                db.close()
+                comm_socket.send(str(f_id).encode())
                 
         comm_socket.close()
 

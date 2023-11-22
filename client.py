@@ -2,12 +2,7 @@ import socket
 import os
 import random
 import time
-import json
 import ast
-
-
-from namespace import parent_id, child_id
-
 
 class Client:
 
@@ -429,11 +424,17 @@ def main():
                 for i in res:
                     print(i[1:-1])
                     
-        elif message[0] == "download":  
-            cl.download_file(message[1])  
+        elif message[0] == "download":
+            cl.namenode_socket.send(action.encode())
+            res = cl.namenode_socket.recv(1024).decode()
+            res2 = int(res)
+            cl.download_file(res2)  
                
-        elif message[0] == "read":        
-            cl.download_file(message[1], save = False)       
+        elif message[0] == "read":         
+            cl.namenode_socket.send(action.encode())
+            res = cl.namenode_socket.recv(1024).decode() 
+            res2 = int(res)
+            cl.download_file(res2, save = False)    
 
     cl.namenode_socket.close()                                               # close the connection
     print("done, client quitting.")
