@@ -191,7 +191,7 @@ def add_file_metadata_and_return_file_id(cursor, db, path, file_name, size):
 
 
 
-def get_datanodes_and_blocks(cursor, database, file_id):
+def get_datanodes_and_blocks(cursor, file_id):
     try:
         # Retrieve datanode_id and block_id for the given file_id
         cursor.execute(

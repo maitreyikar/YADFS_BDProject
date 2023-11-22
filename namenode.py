@@ -138,11 +138,6 @@ class Namenode:
                 tree = view_hierarchy(cursor, 1)
                 db.close()
                 comm_socket.send(str(tree).encode())
-            elif command[0] == "GET_METADATA_BY_ID":
-                cursor, db = self.connect_to_MySQL()
-                block_datanode_dict = get_datanodes_and_blocks(cursor, db, command[1])
-                db.close()
-                comm_socket.send(str(block_datanode_dict).encode())
 
                 
         comm_socket.close()
