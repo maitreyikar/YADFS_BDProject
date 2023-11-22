@@ -8,18 +8,25 @@ from namespace import *
 
 class Namenode:
     def __init__(self):
+
+        # keeps track of active DNs
         self.connections = []
+
+        # server side TCP socket for listening to client connection requests
         self.port = 5000
         self.ip = socket.gethostname()
         self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.socket.bind((self.ip, self.port))
 
+        # SQL server info
         self.host = "localhost"
         self.user = "root"
-        self.password = "maitreyi@1304"
+        self.password = "Malay@2002@"
         self.database = "bdproject"
 
     def connect_to_MySQL(self):
+        # connect to mysql server for metadata and namespace ops
+
         db = mysql.connector.connect(
             host = self.host,
             user = self.user,
@@ -70,7 +77,7 @@ class Namenode:
 
             elif command[0] == "get_metadata":
                 cursor, db = self.connect_to_MySQL()
-                block_locations = get_datanodes_and_blocks(cursor, command[1])
+                block_locations = get_datanodes_and_blocks(cursor, db, command[1])
                 db.close()
                 comm_socket.send(str(block_locations).encode())
 
@@ -144,7 +151,16 @@ class Namenode:
                 tree = view_hierarchy(cursor, 1)
                 db.close()
                 comm_socket.send(str(tree).encode())
-
+            elif command[0] == "GET_METADATA_BY_ID":
+                cursor, db = self.connect_to_MySQL()
+                block_datanode_dict = get_datanodes_and_blocks(cursor, db, command[1])
+                db.close()
+                comm_socket.send(str(block_datanode_dict).encode())
+            elif command[0] == "download" or command[0] == "read":
+                cursor, db = self.connect_to_MySQL()
+                f_id = child_id(cursor, db, command[1])
+                db.close()
+                comm_socket.send(str(f_id).encode())
                 
         comm_socket.close()
 
@@ -166,6 +182,7 @@ class Namenode:
                 print(f"datanode {dn_id} did not acknowledge ping")
                 break
 
+        # if connection lost, update list of active datanodes
         self.connections.remove(int(dn_id))
         comm_socket.close()
 
@@ -189,6 +206,7 @@ def main():
         elif data.startswith("datanode"):
             pool.submit(nn.ping_datanode, comm_socket, str(port), data[-1])
             nn.connections.append(int(data[-1]))
+            
         
 
 pool = concurrent.futures.ThreadPoolExecutor(max_workers=10)                # thread pool

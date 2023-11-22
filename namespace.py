@@ -117,7 +117,23 @@ def get_accessible_files(cursor, db, dir_id):
 
     return accessible_files
 
+def path_milega_file_id_Return_krna_hai(cursor, db, path):
+    try:
+        ID = child_id(cursor, db, path)
 
+        if ID == -1:
+            #print("Invalid path.")
+            return -1
+
+        query = "UPDATE files set time_of_modification = CURRENT_TIMESTAMP where file_id= %s"
+        cursor.execute(query, (ID,))
+        db.commit()
+        return ID
+    except Error as e:
+        #print(f"Error deleting file: {e}")
+        db.rollback()
+        return -1
+	
 
 def create_directory(cursor, db, path):
     try:
@@ -157,24 +173,6 @@ def delete_directory(cursor, db, path):
         #print(f"Error deleting directory: {e}")
         db.rollback()
         return -1
-
-def path_milega_file_id_Return_krna_hai(cursor, db, path):
-    try:
-        ID = child_id(cursor, db, path)
-
-        if ID == -1:
-            #print("Invalid path.")
-            return -1
-
-        query = "UPDATE files set time_of_modification = CURRENT_TIMESTAMP where file_id= %s"
-        cursor.execute(query, (ID,))
-        db.commit()
-        return ID
-    except Error as e:
-        #print(f"Error deleting file: {e}")
-        db.rollback()
-        return -1
-
 
 def delete_file(cursor, db, path):
     try:
@@ -527,4 +525,8 @@ def print_directory_tree(cursor, parent_dir_id, indent_level, tree):
 #     if db.is_connected():
 #         cursor.close()
 #         db.close()
+<<<<<<< HEAD
 #         print("Connection closed")
+=======
+#         print("Connection closed")
+>>>>>>> origin/main

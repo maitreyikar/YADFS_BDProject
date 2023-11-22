@@ -58,7 +58,7 @@ class Client:
 
 ############# modified
     def get_metadata_from_namenode(self, filename):
-        self.namenode_socket.send(f"GET_METADATA {filename}".encode())
+        self.namenode_socket.send(f"get_metadata {filename}".encode())
         metadata = self.namenode_socket.recv(64000).decode() #64kb
         return json.loads(metadata)
     
