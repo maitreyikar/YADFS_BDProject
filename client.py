@@ -211,9 +211,10 @@ class Client:
         #checking if file exists
         if metadata:
             for block_id in metadata:
-                datanode_id = metadata[block_id][0]
-                datanode_socket = self.connect_to_datanode(datanode_id)
-                datanode_socket.send(f"delete {fileid}".encode())
+                for i in len(metadata[block_id]):
+                    datanode_id = metadata[block_id][i]
+                    datanode_socket = self.connect_to_datanode(datanode_id)
+                    datanode_socket.send(f"delete {fileid}".encode())
         
             #delete the blocks permanently
             self.namenode_socket.send(f"rmblock {fileid}".encode())
