@@ -455,6 +455,9 @@ def main():
             res2 = int(res)
             cl.download_file(res2, save = False)    
 
+        elif message[0] == "write":         
+            cl.write_file(message[1])  
+
     cl.namenode_socket.close()                                               # close the connection
     print("done, client quitting.")
 
