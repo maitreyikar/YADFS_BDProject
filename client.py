@@ -23,10 +23,12 @@ class Client:
     def get_active_datanodes(self):
         # gets active datanodes from namenode
 
+
         self.namenode_socket.send("active datanodes".encode())
         slist = self.namenode_socket.recv(1024).decode()
         self.active_datanodes = slist[1:-1].split(", ")
         self.active_datanodes = list(map(int, self.active_datanodes))
+
         
     
     
@@ -123,6 +125,7 @@ class Client:
         # get a list of active datanodes
         self.get_active_datanodes()
 
+
         # create blocks
         file_blocks = self.form_blocks(local_filepath)
         print(len(file_blocks))
@@ -178,7 +181,7 @@ class Client:
             
             temp = self.connect_to_datanode(dn_id)
             temp.send(f"GET_BLOCK_BY_ID {block_id} {file_id}".encode())
-            block = temp.recv(4096).decode()
+            block = temp.recv(5120).decode()
             if block != "Block not found":
                 blocks.append(block)
             else:
@@ -200,9 +203,33 @@ class Client:
 
     
 
-    def write_to_file(self, local_filepath, dfs_filepath):
-        pass
+    def write_file(self, src_file, dest_filepath):
+        #update timestamp -- it will give file id as well 
+        self.namenode_socket.send(f"read {dest_filepath}".encode())
+        fileid = int(self.namenode_socket.recv(1024).decode())
+        
+        #get metadata - to check if file exists or not
+        metadata=self.retrieve_file_metadata_by_id(fileid)
 
+        #checking if file exists
+        if metadata:
+            for block_id in metadata:
+                for i in range(len(metadata[block_id])):
+                    datanode_id = metadata[block_id][i]
+                    datanode_socket = self.connect_to_datanode(datanode_id)
+                    datanode_socket.send(f"delete {fileid}".encode())
+                    datanode_socket.close()
+        
+            #delete the blocks permanently
+            self.namenode_socket.send(f"rmblock {fileid}".encode())
+            status = self.namenode_socket.recv(1024).decode()
+            time.sleep(2)
+
+        #upload the file
+
+        self.upload_file(src_file, fileid)
+
+        datanode_socket.close()
 
         
 def main():
@@ -435,6 +462,9 @@ def main():
             res = cl.namenode_socket.recv(1024).decode() 
             res2 = int(res)
             cl.download_file(res2, save = False)    
+
+        elif message[0] == "write":         
+            cl.write_file(message[1], message[2])
 
     cl.namenode_socket.close()                                               # close the connection
     print("done, client quitting.")

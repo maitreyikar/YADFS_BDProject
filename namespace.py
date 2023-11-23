@@ -193,6 +193,24 @@ def delete_file(cursor, db, path):
         return -1
 
 
+def delete_blocks(cursor, db, ID):
+    try:
+        #ID = child_id(cursor, db, path)
+
+        if ID == -1:
+            #print("Invalid path.")
+            return -1
+
+        query = "DELETE FROM blocks WHERE file_id = %s"
+        cursor.execute(query, (ID,))
+        db.commit()
+        #print("Block with ID %s deleted successfully." % ID)
+        return ID
+    except Error as e:
+        #print(f"Error deleting block: {e}")
+        db.rollback()
+        return -1
+
 def move_directory(cursor, db, path, new_path):
     try:
         ID = child_dir_id(cursor, db, path)

@@ -278,3 +278,4 @@ def add_block_metadata(cursor, db, file_id, block_id, datanode_id):
 #     print(var)
 # if __name__ == "__main__":
 #     main()
+

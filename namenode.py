@@ -55,6 +55,7 @@ class Namenode:
                 break
             
             command = data.strip().split(" ")
+            print(command)
 
             if command[0] == "active":
                 res = str(self.fetch_active_datanodes())
@@ -91,6 +92,12 @@ class Namenode:
             elif command[0] == "rmdir":
                 cursor, db = self.connect_to_MySQL()
                 status = delete_directory(cursor, db, command[1])
+                db.close()
+                comm_socket.send(str(status).encode())
+
+            elif command[0] == "rmblock":
+                cursor, db = self.connect_to_MySQL()
+                status = delete_blocks(cursor, db, command[1])
                 db.close()
                 comm_socket.send(str(status).encode())
 
